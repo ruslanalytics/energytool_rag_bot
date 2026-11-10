@@ -16,8 +16,8 @@ create table messages (
     content text not null,
     -- Время ответа в мс
     response_time_ms int,
-    -- Какие источники использовала модель
-    used_sources text,
+    -- Какие источники использовала модель (если писал пользователь, то создастся пустой массив, а не Null)
+    used_sources jsonb default '[]'::jsonb,
     -- Хранит данные в формате UTC, но при выводе переводит в текущий часовой пояс
     created_at timestamp with time zone default now()
 );
@@ -35,3 +35,7 @@ create table leads (
     -- Хранит данные в формате UTC, но при выводе переводит в текущий часовой пояс
     created_at timestamp with time zone default now()
 );
+
+-- Индексы на внешние ключи для поиска сообщений и заявок по номеру сессии
+create index idx_messages_session_id on messages(session_id);
+create index idx_leads_session_id on leads(session_id);
