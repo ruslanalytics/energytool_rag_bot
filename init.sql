@@ -16,8 +16,8 @@ create table messages (
     content text not null,
     -- Время ответа в мс
     response_time_ms int,
-    -- Какие источники использовала модель
-    used_sources text,
+    -- Какие источники использовала модель (если писал пользователь, то создастся пустой массив, а не Null)
+    used_sources jsonb default '[]'::jsonb,
     -- Хранит данные в формате UTC, но при выводе переводит в текущий часовой пояс
     created_at timestamp with time zone default now()
 );
