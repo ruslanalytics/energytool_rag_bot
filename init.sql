@@ -35,3 +35,7 @@ create table leads (
     -- Хранит данные в формате UTC, но при выводе переводит в текущий часовой пояс
     created_at timestamp with time zone default now()
 );
+
+-- Индексы на внешние ключи для поиска сообщений и заявок по номеру сессии
+create index idx_messages_session_id on messages(session_id);
+create index idx_leads_session_id on leads(session_id);
