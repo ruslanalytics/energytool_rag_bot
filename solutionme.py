@@ -8,9 +8,9 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-
 import httpx
 import chromadb
+import pandas as pd
 
 def env(name, default=""):
     value = os.getenv(name, "").strip()
@@ -22,25 +22,22 @@ def number(name, default, lower, upper, kind=int):
         return default
 
 # ================ TEMPORARY CHANGED SOME ENV VARIABLES, WILL SWITCH BACK LATER ==================
-
 DATA_DIR = Path(env("DATA_DIR", "data"))
-BASE_URL = 'http://localhost:11434/api' #(env("LLM_BASE_URL") or env("BASE_URL") or env("OPENAI_BASE_URL")).rstrip("/")
-LLM_KEY = env("LLM_API_KEY") or env("OPENAI_API_KEY")
-EMB_KEY = 'embed_key' #env("EMBEDDER_API_KEY") or LLM_KEY
+BASE_URL = 'http://localhost:11434/v1' #(env("LLM_BASE_URL") or env("BASE_URL") or env("OPENAI_BASE_URL")).rstrip("/")
+LLM_KEY = 'LLM_KEY' #env("LLM_API_KEY") or env("OPENAI_API_KEY")
+EMB_KEY = 'EMB_KEY' #env("EMBEDDER_API_KEY") or LLM_KEY
 RERANK_KEY = env("RERANKER_API_KEY") or LLM_KEY
-LLM_MODEL = env("LLM_MODEL") or env("GEN_MODEL") or env("OPENAI_MODEL", "qwen/qwen3.8-27b")
+LLM_MODEL = 'qwen2.5:7b-instruct' #env("LLM_MODEL") or env("GEN_MODEL") or env("OPENAI_MODEL", "qwen/qwen3.8-27b")
 EMB_MODEL = 'bge-m3:latest' #env("EMB_MODEL", "baai/bge-m3")
 RERANKER_MODEL = env("RERANKER_MODEL", "qwen/qwen3-reranker-8b")
-TOP_K = 20 #number("TOP_K", 4, 1, 30)
+TOP_K = number("TOP_K", 4, 1, 30)
 RERANKER_TOP_N = number("RERANKER_TOP_N", 2, 1, 30)
 MAX_TOKENS = number("MAX_TOKENS", 2048, 128, 8192)
 MAX_WORKERS = number("MAX_WORKERS", 3, 1, 8)
 TEMPERATURE = number("TEMPERATURE", 0.0, 0.0, 2.0, float)
 CHUNKER = env("CHUNKER", "common")
-# PYTHONPATH применяется самим Python, вручную обрабатывать его не нужно.
 
 FALLBACK = "Не могу ответить по доступным фрагментам базы знаний."
-WORD = re.compile(r"[0-9A-Za-zА-Яа-яЁё]{4,}")
 
 def post(client, endpoint, key, body):
     if not BASE_URL or not key:
@@ -67,7 +64,6 @@ def find_file(*names):
                 return path
     raise FileNotFoundError(f"Не найдены файлы: {names}")
 
-
 def chunk(text, chunk_size, collision):
     text = text.split()
     chunks = []
@@ -86,7 +82,7 @@ def load_documents(path):
                 continue
             text = archive.read(name).decode("utf-8-sig", errors="replace")
             if text.strip():
-                chunks = chunk(text, 300, 50)
+                chunks = chunk(text, 400, 100)
                 for idx, c in enumerate(chunks):
                     documents.append({
                         'source' : name,
@@ -103,13 +99,13 @@ def get_embeddings(documents):
     with httpx.Client(timeout=50) as client:
         texts_to_embed = [f"Источник: {doc['source']}, Содержание: {doc['content']}" for doc in documents]
         body = {'model' : EMB_MODEL, 'input' : texts_to_embed}
-        embeddings = post(client, '/embed', EMB_KEY, body)['embeddings']
+        embeddings = [doc['embedding'] for doc in post(client, '/embeddings', EMB_KEY, body)['data']]
         for doc, embedding in zip(documents, embeddings): 
             result.append({**doc, 'embedding' : embedding})
     return result 
 
 
-# ======= Vector Database =================================
+# ========================= VECTOR DATABASE =================================
 
 def vdb_init():
     client = chromadb.PersistentClient(path='./chroma_db')
@@ -134,17 +130,15 @@ def save_embeddings(collection, documents_w_embeds):
         })
     collection.upsert(ids=ids, embeddings=embeddings, documents=contents, metadatas=metadatas)
 
-def build_vdb():
+def build_vdb(documents):
     _, collection = vdb_init()
-    docs = load_documents(find_file('knowledge-base.zip'))
-    docs_w_embeds = get_embeddings(docs)
+    docs_w_embeds = get_embeddings(documents)
     save_embeddings(collection, docs_w_embeds)
     return collection 
 
-
 def get_relevant_documents(collection, query):
     with httpx.Client(timeout=50) as client:
-        embedding = post(client, '/embed', EMB_KEY, {'model' : EMB_MODEL, 'input' : query})['embeddings'][0]
+        embedding = post(client, '/embeddings', EMB_KEY, {'model' : EMB_MODEL, 'input' : query})['data'][0]['embedding']
         output = collection.query(query_embeddings=embedding, n_results=TOP_K, include=['documents', 'metadatas', 'distances'])
         result = []
         for i in range(len(output['ids'][0])):
@@ -158,49 +152,58 @@ def get_relevant_documents(collection, query):
             )
         return result
 
-def getreadydb():
-    return chromadb.PersistentClient(path='./chroma_db').get_or_create_collection(name='mts-energytool-vector-database',metadata={"hnsw:space": "cosine"})
-
-def test_collection_with_query(collection, queries):
-    for q in queries:
-        responses = get_relevant_documents(collection, q)
-        print(f'* Query: {q}')
-        for idx, response in enumerate(responses,1):
-            print(f"{idx}. Source: {response['source']}")
-            print(f"Chunk_id: {response['chunk_id']}")
-            print(f"Distance: {response['distance']}")
-            print(f"Content: {response['content']}")
-            print('='*200)
-        print('\n\n')
-
-
-queries = [
-    'У нас крыша на два ската — восток и запад. Панели можно поставить на оба?',
-    'На крыше почти нет места. А солнечные панели на фасад ставите?',
-    'Можно сначала поставить солнечную станцию на 60 кВт, а потом расширить?',
-    'Нам предлагают компенсировать реактивную энергию. Сначала надо что-то измерить?'
-]
-
-
-# ============== Making Prompt for the Generation Model ====================
-
-def build_info_prompt(relevant_docs, n_best=3):
+# ============== MAKING PROMPT AND GENERATING ANSWER  ====================
+def build_info_prompt(relevant_docs, n_best=TOP_K):
     result = ''
-    for idx, doc in enumerate(relevant_docs[-n_best:][::-1], 1):
+    for idx, doc in enumerate(relevant_docs[:n_best], 1):
         with open(doc['source'], 'r', encoding='utf-8') as file:
-            source_content = file.read().strip('\n ')
             subprompt = f"""{idx}.
             Название источника: {doc['source']}
-            ID Чанка: {doc['chunk_id']}
-            Содержание Чанка: {doc['content']}
             Расстояние до эмбеддинга запроса: {doc['distance']}
-            Содержание источника: {source_content}
+            Содержание Чанка: {doc['content']}
             """
             result += subprompt
-
     return result
 
 
-def generate(info_prompt):
+def generate(info_prompt, question):
+    system_prompt = "Ты консультант МТС EnergyTool. Всегда отвечай на русском, если не попросять отвечать на другом языке. Отвечай кратко и по делу. Задавай клиенту уточняющие вопросы. Не выдумывай факты, которых нет во фрагментах, но никогда не упоминай базу данных или то, что берешь оттуда информацию. При низкой уверенности гоаори, что не можешь ответить на вопрос. Спрашивай клиента, если для ответа недостаточно информации"
+    body = {
+        'model' : LLM_MODEL,
+        "model": LLM_MODEL,
+        "temperature": TEMPERATURE,
+        "max_tokens": MAX_TOKENS,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Фрагменты базы знаний:\n" + info_prompt + "\n\nВопрос:\n" + question},
+        ],
+    }
+    with httpx.Client(timeout=100) as client:
+        output = post(client, '/chat/completions', LLM_KEY, body)['choices'][0]['message']['content']
+        return output
 
-    pass 
+# ======================= THE MAIN FUNCTION ============================
+def main():
+    questions_path = find_file("questions.csv", "train.csv")
+    kb_path = find_file("knowledge-base.zip", "knowledge_base.zip", "kb.zip")
+    print('- found the questions and knowledge base')
+    questions_df = pd.read_csv(questions_path, index_col='id')
+    documents = load_documents(kb_path)
+    print('- loaded the files')
+    print(f'- {len(questions_df)} questions')
+    collection = build_vdb(documents)
+    print('- formed the vector database')
+    questions = questions_df['question'].to_list()
+    ids = questions_df.index.to_list()
+    answers = []
+    for idx, question in enumerate(questions, 1):
+        similar_docs = get_relevant_documents(collection, question)
+        info_prompt = build_info_prompt(similar_docs)
+        answer = generate(info_prompt, question)
+        answers.append(answer)
+        print(f'{idx}. Answered the question: {question} \n - {answer}')
+    answers_df = pd.DataFrame({'id' : ids, 'answer' : answers})
+    answers_df.to_csv('submission.csv', index=False)
+
+if __name__ == '__main__':
+    main()
