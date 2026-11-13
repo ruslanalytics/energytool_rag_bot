@@ -23,12 +23,12 @@ def number(name, default, lower, upper, kind=int):
 
 # ================ TEMPORARY CHANGED SOME ENV VARIABLES, WILL SWITCH BACK LATER ==================
 DATA_DIR = Path(env("DATA_DIR", "data"))
-BASE_URL = 'http://localhost:11434/v1' #(env("LLM_BASE_URL") or env("BASE_URL") or env("OPENAI_BASE_URL")).rstrip("/")
-LLM_KEY = 'LLM_KEY' #env("LLM_API_KEY") or env("OPENAI_API_KEY")
-EMB_KEY = 'EMB_KEY' #env("EMBEDDER_API_KEY") or LLM_KEY
+BASE_URL = 'http://localhost:11434/v1'#(env("LLM_BASE_URL") or env("BASE_URL") or env("OPENAI_BASE_URL")).rstrip("/")
+LLM_KEY = 'llm_key' #env("LLM_API_KEY") or env("OPENAI_API_KEY")
+EMB_KEY = 'emb_key' #env("EMBEDDER_API_KEY") or LLM_KEY
 RERANK_KEY = env("RERANKER_API_KEY") or LLM_KEY
-LLM_MODEL = 'qwen2.5:7b-instruct' #env("LLM_MODEL") or env("GEN_MODEL") or env("OPENAI_MODEL", "qwen/qwen3.8-27b")
-EMB_MODEL = 'bge-m3:latest' #env("EMB_MODEL", "baai/bge-m3")
+LLM_MODEL = ' qwen2.5:7b-instruct' # env("LLM_MODEL") or env("GEN_MODEL") or env("OPENAI_MODEL", "qwen/qwen3.8-27b")
+EMB_MODEL = 'bge-m3' #env("EMB_MODEL", "baai/bge-m3")
 RERANKER_MODEL = env("RERANKER_MODEL", "qwen/qwen3-reranker-8b")
 TOP_K = number("TOP_K", 4, 1, 30)
 RERANKER_TOP_N = number("RERANKER_TOP_N", 2, 1, 30)
@@ -36,8 +36,6 @@ MAX_TOKENS = number("MAX_TOKENS", 2048, 128, 8192)
 MAX_WORKERS = number("MAX_WORKERS", 3, 1, 8)
 TEMPERATURE = number("TEMPERATURE", 0.0, 0.0, 2.0, float)
 CHUNKER = env("CHUNKER", "common")
-
-FALLBACK = "Не могу ответить по доступным фрагментам базы знаний."
 
 def post(client, endpoint, key, body):
     if not BASE_URL or not key:
@@ -86,6 +84,7 @@ def load_documents(path):
                 for idx, c in enumerate(chunks):
                     documents.append({
                         'source' : name,
+                        'source_content' : text, 
                         'chunk_id' : idx,
                         'content' : ' '.join(c)
                     })
@@ -139,7 +138,7 @@ def build_vdb(documents):
 def get_relevant_documents(collection, query):
     with httpx.Client(timeout=50) as client:
         embedding = post(client, '/embeddings', EMB_KEY, {'model' : EMB_MODEL, 'input' : query})['data'][0]['embedding']
-        output = collection.query(query_embeddings=embedding, n_results=TOP_K, include=['documents', 'metadatas', 'distances'])
+        output = collection.query(query_embeddings=[embedding], n_results=TOP_K, include=['documents', 'metadatas', 'distances'])
         result = []
         for i in range(len(output['ids'][0])):
             result.append(
@@ -156,26 +155,23 @@ def get_relevant_documents(collection, query):
 def build_info_prompt(relevant_docs, n_best=TOP_K):
     result = ''
     for idx, doc in enumerate(relevant_docs[:n_best], 1):
-        with open(doc['source'], 'r', encoding='utf-8') as file:
-            subprompt = f"""{idx}.
-            Название источника: {doc['source']}
-            Расстояние до эмбеддинга запроса: {doc['distance']}
-            Содержание Чанка: {doc['content']}
-            """
-            result += subprompt
+        subprompt = f"""{idx}.
+        Название источника: {doc['source']}
+        Содержание Чанка: {doc['content']}
+        """
+        result += subprompt
     return result
 
 
 def generate(info_prompt, question):
-    system_prompt = "Ты консультант МТС EnergyTool. Всегда отвечай на русском, если не попросять отвечать на другом языке. Отвечай кратко и по делу. Задавай клиенту уточняющие вопросы. Не выдумывай факты, которых нет во фрагментах, но никогда не упоминай базу данных или то, что берешь оттуда информацию. При низкой уверенности гоаори, что не можешь ответить на вопрос. Спрашивай клиента, если для ответа недостаточно информации"
-    body = {
+    system_prompt = "Ты консультант МТС EnergyTool. Отвечай максимально кратко и по делу. Всегда отвечай на русском, если не попросять отвечать на другом языке. Не выдумывай факты, которых нет в предоставленных фрагментах. При низкой уверенности говори, что не можешь ответить на вопрос и задай уточняющий вопрос клиенту"
+    body = { 
         'model' : LLM_MODEL,
-        "model": LLM_MODEL,
         "temperature": TEMPERATURE,
         "max_tokens": MAX_TOKENS,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "Фрагменты базы знаний:\n" + info_prompt + "\n\nВопрос:\n" + question},
+            {"role": "user", "content": "Фрагменты базы знаний:\n" + info_prompt + "\n\nВопрос (ответь двумя-тремя предложениями. Если вопрос содержит разговор пользователя и ассистента, обязательно учитывай полный диалог. Задавай клиенту уточняющий вопрос, относящийся к делу):\n" + question},
         ],
     }
     with httpx.Client(timeout=100) as client:
