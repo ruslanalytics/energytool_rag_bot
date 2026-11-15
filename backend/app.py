@@ -12,7 +12,7 @@ import rag
 import storage
 
 MAX_MESSAGE_LENGTH = 2000
-INDEX_PATH = Path(__file__).resolve().parent / "static" / "index.html"
+INDEX_PATH = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
 TIMING_KEYS = ("search_seconds", "rerank_seconds", "llm_seconds")
 state = {"index": None}
 
