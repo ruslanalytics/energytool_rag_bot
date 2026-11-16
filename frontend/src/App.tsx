@@ -33,28 +33,15 @@ export default function App() {
     bootstrapped.current = true;
 
     async function bootstrap() {
-      try {
-        if (!sessionId) {
-          const { session_id } = await createSession();
-          setSessionId(session_id);
-          return;
-        }
-        try {
-          await getSessionMessages(sessionId);
-        } catch (err) {
-          if (err instanceof ApiError && err.status === 404) {
-            const { session_id } = await createSession();
-            setSessionId(session_id);
-          } else {
-            throw err;
+          if (sessionId) return // существующую сессию проверит и, если нужно, пересоздаст messagesQuery + эффект ниже
+          try {
+            const { session_id } = await createSession()
+            setSessionId(session_id)
+          } catch {
+            setBootError('Не удалось подключиться к серверу. Проверьте соединение и обновите страницу.')
           }
         }
-      } catch {
-        setBootError(
-          "Не удалось подключиться к серверу. Проверьте соединение и обновите страницу.",
-        );
-      }
-    }
+
 
     bootstrap();
   }, [sessionId, setSessionId]);
