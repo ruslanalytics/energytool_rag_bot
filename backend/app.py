@@ -1,6 +1,7 @@
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +40,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="МТС Energytool: ИИ-консультант", lifespan=lifespan)
+app.mount("/assets", StaticFiles(directory=INDEX_PATH.parent / "assets"), name="assets")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
