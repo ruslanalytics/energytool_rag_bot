@@ -6,7 +6,11 @@ import { formatSessionDate } from '../utils/time'
 import ErrorBanner from './ErrorBanner'
 import styles from './Sidebar.module.css'
 
-export default function Sidebar() {
+interface Props {
+  isCurrentChatEmpty: boolean
+}
+
+export default function Sidebar({isCurrentChatEmpty }: Props) {
   const sessionId = useAppStore((s) => s.sessionId)
   const setSessionId = useAppStore((s) => s.setSessionId)
   const view = useAppStore((s) => s.view)
@@ -68,7 +72,13 @@ export default function Sidebar() {
       <button
         type="button"
         className={styles.newChat}
-        onClick={() => newChatMutation.mutate()}
+        onClick={() => {
+                  if (isCurrentChatEmpty) {
+                    setView('chat')
+                    return
+                  }
+                  newChatMutation.mutate()
+                }}
         disabled={newChatMutation.isPending}
       >
         <PlusIcon /> Новый чат

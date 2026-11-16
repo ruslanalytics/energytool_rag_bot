@@ -181,7 +181,7 @@ export default function App() {
     <div
       className={`${styles.app} ${view === "history" ? styles.showHistory : styles.showChat}`}
     >
-      <Sidebar />
+      <Sidebar isCurrentChatEmpty={messages.length === 0}/>
       <main className={styles.chatPanel}>
         <ChatHeader title={firstUserMessage?.content ?? null} />
         <MessageList
