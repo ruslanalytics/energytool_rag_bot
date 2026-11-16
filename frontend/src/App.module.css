@@ -1,0 +1,31 @@
+.app {
+  display: flex;
+  height: 100%;
+  background: var(--color-bg-panel);
+}
+
+.chatPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  background: var(--color-bg-page);
+}
+
+.fatalError {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: var(--space-lg);
+  background: var(--color-bg-page);
+}
+
+@media (max-width: 720px) {
+  .app.showChat :global(.sidebar) {
+    display: none;
+  }
+  .app.showHistory .chatPanel {
+    display: none;
+  }
+}

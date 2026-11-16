@@ -1,0 +1,93 @@
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--color-bg-panel);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.historyButton {
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  padding: var(--space-2xs);
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .historyButton {
+    display: flex;
+  }
+}
+
+.breadcrumb {
+  flex: 1;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debugToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.debugLabel {
+  user-select: none;
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.switchInput {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.switchTrack {
+  width: 34px;
+  height: 20px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  padding: 2px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  transition: background-color 0.15s ease;
+}
+
+.switchThumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: var(--shadow-bubble);
+  transition: transform 0.15s ease;
+}
+
+.switchInput:checked + .switchTrack {
+  background: var(--color-accent);
+}
+
+.switchInput:checked + .switchTrack .switchThumb {
+  transform: translateX(14px);
+}
+
+.switchInput:focus-visible + .switchTrack {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

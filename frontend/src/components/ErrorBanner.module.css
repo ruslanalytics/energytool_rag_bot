@@ -1,0 +1,23 @@
+.banner {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  margin: var(--space-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+}
+
+.retry {
+  background: var(--color-error-text);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 4px var(--space-sm);
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+}
